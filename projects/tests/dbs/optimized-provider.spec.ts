@@ -173,7 +173,12 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
         name: 'Electronics',
         description: 'Gadgets',
       })
-      await productRepo.insert({ id: 1, name: 'Phone', price: 999, categoryId: 1 })
+      await productRepo.insert({
+        id: 1,
+        name: 'Phone',
+        price: 999,
+        categoryId: 1,
+      })
 
       const products = await productRepo.find({ include: { category: true } })
       expect(products.length).toBe(1)
@@ -190,7 +195,12 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
         name: 'Electronics',
         description: 'Gadgets',
       })
-      await productRepo.insert({ id: 1, name: 'Orphan', price: 50, categoryId: 999 })
+      await productRepo.insert({
+        id: 1,
+        name: 'Orphan',
+        price: 50,
+        categoryId: 999,
+      })
 
       const products = await productRepo.find({ include: { category: true } })
       expect(products.length).toBe(1)
@@ -268,8 +278,20 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
 
       await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
       await employeeRepo.insert([
-        { id: 1, firstName: 'Boss', lastName: 'Man', companyId: 1, managerId: null },
-        { id: 2, firstName: 'Worker', lastName: 'Bee', companyId: 1, managerId: 1 },
+        {
+          id: 1,
+          firstName: 'Boss',
+          lastName: 'Man',
+          companyId: 1,
+          managerId: null,
+        },
+        {
+          id: 2,
+          firstName: 'Worker',
+          lastName: 'Bee',
+          companyId: 1,
+          managerId: 1,
+        },
       ])
 
       const employees = await employeeRepo.find({
@@ -293,8 +315,16 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
         { id: 5, name: 'E', city: 'NYC' },
       ])
 
-      const page1 = await repo.find({ limit: 2, page: 1, orderBy: { id: 'asc' } })
-      const page2 = await repo.find({ limit: 2, page: 2, orderBy: { id: 'asc' } })
+      const page1 = await repo.find({
+        limit: 2,
+        page: 1,
+        orderBy: { id: 'asc' },
+      })
+      const page2 = await repo.find({
+        limit: 2,
+        page: 2,
+        orderBy: { id: 'asc' },
+      })
 
       expect(page1.map((c) => c.id)).toEqual([1, 2])
       expect(page2.map((c) => c.id)).toEqual([3, 4])
@@ -372,7 +402,9 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
 
       await provider.transaction(async (txProvider) => {
         const txRemult = new Remult(txProvider)
-        await txRemult.repo(Company).insert({ id: 1, name: 'In Transaction', city: 'TX' })
+        await txRemult
+          .repo(Company)
+          .insert({ id: 1, name: 'In Transaction', city: 'TX' })
       })
 
       expect(await repo.count()).toBe(1)
@@ -386,9 +418,27 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
 
       await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
       await employeeRepo.insert([
-        { id: 1, firstName: 'CEO', lastName: 'Boss', companyId: 1, managerId: null },
-        { id: 2, firstName: 'CTO', lastName: 'Tech', companyId: 1, managerId: 1 },
-        { id: 3, firstName: 'Dev', lastName: 'Coder', companyId: 1, managerId: 2 },
+        {
+          id: 1,
+          firstName: 'CEO',
+          lastName: 'Boss',
+          companyId: 1,
+          managerId: null,
+        },
+        {
+          id: 2,
+          firstName: 'CTO',
+          lastName: 'Tech',
+          companyId: 1,
+          managerId: 1,
+        },
+        {
+          id: 3,
+          firstName: 'Dev',
+          lastName: 'Coder',
+          companyId: 1,
+          managerId: 2,
+        },
       ])
 
       const employees = await employeeRepo.find({
@@ -622,9 +672,24 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
 
       await companyRepo.insert({ id: 1, name: 'Customer', city: 'NYC' })
       await orderRepo.insert([
-        { id: 1, orderNumber: 'ORD-001', orderDate: new Date('2024-01-15'), customerId: 1 },
-        { id: 2, orderNumber: 'ORD-002', orderDate: new Date('2024-06-15'), customerId: 1 },
-        { id: 3, orderNumber: 'ORD-003', orderDate: new Date('2024-12-15'), customerId: 1 },
+        {
+          id: 1,
+          orderNumber: 'ORD-001',
+          orderDate: new Date('2024-01-15'),
+          customerId: 1,
+        },
+        {
+          id: 2,
+          orderNumber: 'ORD-002',
+          orderDate: new Date('2024-06-15'),
+          customerId: 1,
+        },
+        {
+          id: 3,
+          orderNumber: 'ORD-003',
+          orderDate: new Date('2024-12-15'),
+          customerId: 1,
+        },
       ])
 
       const result = await orderRepo.find({
@@ -632,6 +697,657 @@ function runOptimizedProviderTests(createKnex: () => Knex.Knex) {
         orderBy: { orderDate: 'asc' },
       })
       expect(result.length).toBe(2)
+    })
+  })
+}
+
+@Entity('opt_country')
+class Country {
+  @Fields.integer()
+  id = 0
+  @Fields.string()
+  name = ''
+  @Fields.string()
+  continent = ''
+}
+
+@Entity('opt_region')
+class Region {
+  @Fields.integer()
+  id = 0
+  @Fields.string()
+  name = ''
+
+  @Fields.integer()
+  countryId = 0
+  @Relations.toOne<Region, Country>(() => Country, 'countryId')
+  country?: Country
+}
+
+@Entity('opt_city')
+class City {
+  @Fields.integer()
+  id = 0
+  @Fields.string()
+  name = ''
+  @Fields.integer()
+  population = 0
+
+  @Fields.integer()
+  regionId = 0
+  @Relations.toOne<City, Region>(() => Region, 'regionId')
+  region?: Region
+
+  @Fields.string({ sqlExpression: () => '@JOIN:region.name' })
+  regionName = ''
+}
+
+@Entity('opt_invoice')
+class Invoice {
+  @Fields.integer()
+  id = 0
+  @Fields.string()
+  invoiceNumber = ''
+  @Fields.number()
+  amount = 0
+
+  @Fields.integer()
+  customerId = 0
+  @Relations.toOne<Invoice, Company>(() => Company, 'customerId')
+  customer?: Company
+
+  @Fields.string({ sqlExpression: () => '@JOIN:customer.name' })
+  customerName = ''
+
+  @Fields.string({ sqlExpression: () => '@JOIN:customer.city' })
+  customerCity = ''
+}
+
+@Entity('opt_task')
+class Task {
+  @Fields.integer()
+  id = 0
+  @Fields.string()
+  title = ''
+  @Fields.string()
+  priority = ''
+  @Fields.date()
+  dueDate = new Date()
+
+  @Fields.integer()
+  assigneeId = 0
+  @Relations.toOne<Task, Employee>(() => Employee, 'assigneeId')
+  assignee?: Employee
+
+  @Fields.string({ sqlExpression: () => '@JOIN:assignee.firstName' })
+  assigneeName = ''
+}
+
+function runAdvancedOptimizedProviderTests(createKnex: () => Knex.Knex) {
+  let knex: Knex.Knex
+  let provider: OptimizedDataProvider
+  let remult: Remult
+  let base: SafeKnexDataProvider
+
+  beforeAll(async () => {
+    knex = createKnex()
+  }, 30000)
+
+  beforeEach(async () => {
+    const setup = await setupProvider(knex)
+    provider = setup.provider
+    remult = setup.remult
+    base = setup.base
+  })
+
+  describe('Deeply Nested Relations (A→B→C)', () => {
+    it('should load 3-level nested relations', async () => {
+      const countryRepo = await createEntity(knex, remult, base, Country)
+      const regionRepo = await createEntity(knex, remult, base, Region)
+      const cityRepo = await createEntity(knex, remult, base, City)
+
+      await countryRepo.insert({
+        id: 1,
+        name: 'USA',
+        continent: 'North America',
+      })
+      await regionRepo.insert({ id: 1, name: 'California', countryId: 1 })
+      await cityRepo.insert({
+        id: 1,
+        name: 'Los Angeles',
+        population: 4000000,
+        regionId: 1,
+      })
+
+      const cities = await cityRepo.find({ include: { region: true } })
+      expect(cities.length).toBe(1)
+      expect(cities[0].region?.name).toBe('California')
+      expect(cities[0].regionName).toBe('California')
+    })
+
+    it('should handle null in nested chain', async () => {
+      const countryRepo = await createEntity(knex, remult, base, Country)
+      const regionRepo = await createEntity(knex, remult, base, Region)
+      const cityRepo = await createEntity(knex, remult, base, City)
+
+      await countryRepo.insert({
+        id: 1,
+        name: 'USA',
+        continent: 'North America',
+      })
+      await regionRepo.insert({ id: 1, name: 'California', countryId: 1 })
+      await cityRepo.insert({
+        id: 1,
+        name: 'Orphan City',
+        population: 100,
+        regionId: 999,
+      })
+
+      const cities = await cityRepo.find({ include: { region: true } })
+      expect(cities.length).toBe(1)
+      expect(cities[0].region).toBeFalsy()
+    })
+
+    it('should filter by nested relation field', async () => {
+      const countryRepo = await createEntity(knex, remult, base, Country)
+      const regionRepo = await createEntity(knex, remult, base, Region)
+      const cityRepo = await createEntity(knex, remult, base, City)
+
+      await countryRepo.insert([
+        { id: 1, name: 'USA', continent: 'North America' },
+        { id: 2, name: 'Canada', continent: 'North America' },
+      ])
+      await regionRepo.insert([
+        { id: 1, name: 'California', countryId: 1 },
+        { id: 2, name: 'Ontario', countryId: 2 },
+      ])
+      await cityRepo.insert([
+        { id: 1, name: 'Los Angeles', population: 4000000, regionId: 1 },
+        { id: 2, name: 'Toronto', population: 2700000, regionId: 2 },
+      ])
+
+      // Filter by region via $id
+      const californiaCities = await cityRepo.find({
+        where: { region: { $id: 1 } },
+        include: { region: true },
+      })
+      expect(californiaCities.length).toBe(1)
+      expect(californiaCities[0].name).toBe('Los Angeles')
+    })
+  })
+
+  describe('Multiple @JOIN Fields from Same Relation', () => {
+    it('should resolve multiple @JOIN fields from same relation', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const invoiceRepo = await createEntity(knex, remult, base, Invoice)
+
+      await companyRepo.insert({ id: 1, name: 'Acme Corp', city: 'NYC' })
+      await invoiceRepo.insert({
+        id: 1,
+        invoiceNumber: 'INV-001',
+        amount: 1000,
+        customerId: 1,
+      })
+
+      const invoices = await invoiceRepo.find({ include: { customer: true } })
+      expect(invoices.length).toBe(1)
+      expect(invoices[0].customerName).toBe('Acme Corp')
+      expect(invoices[0].customerCity).toBe('NYC')
+      expect(invoices[0].customer?.name).toBe('Acme Corp')
+    })
+
+    it('should handle null for multiple @JOIN fields', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const invoiceRepo = await createEntity(knex, remult, base, Invoice)
+
+      await companyRepo.insert({ id: 1, name: 'Acme Corp', city: 'NYC' })
+      // Invoice with non-existent customer
+      await invoiceRepo.insert({
+        id: 1,
+        invoiceNumber: 'INV-001',
+        amount: 500,
+        customerId: 999,
+      })
+
+      const invoices = await invoiceRepo.find({ include: { customer: true } })
+      expect(invoices.length).toBe(1)
+      expect(invoices[0].customer).toBeFalsy()
+    })
+  })
+
+  describe('Sorting by @JOIN Computed Field', () => {
+    it('should sort by @JOIN computed field ascending', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+      const taskRepo = await createEntity(knex, remult, base, Task)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        { id: 1, firstName: 'Zoe', lastName: 'Smith', companyId: 1 },
+        { id: 2, firstName: 'Alice', lastName: 'Johnson', companyId: 1 },
+        { id: 3, firstName: 'Mike', lastName: 'Brown', companyId: 1 },
+      ])
+      await taskRepo.insert([
+        {
+          id: 1,
+          title: 'Task A',
+          priority: 'high',
+          assigneeId: 1,
+          dueDate: new Date(),
+        },
+        {
+          id: 2,
+          title: 'Task B',
+          priority: 'low',
+          assigneeId: 2,
+          dueDate: new Date(),
+        },
+        {
+          id: 3,
+          title: 'Task C',
+          priority: 'medium',
+          assigneeId: 3,
+          dueDate: new Date(),
+        },
+      ])
+
+      const tasks = await taskRepo.find({
+        orderBy: { assigneeName: 'asc' },
+        include: { assignee: true },
+      })
+
+      expect(tasks[0].assigneeName).toBe('Alice')
+      expect(tasks[1].assigneeName).toBe('Mike')
+      expect(tasks[2].assigneeName).toBe('Zoe')
+    })
+
+    it('should sort by @JOIN computed field descending', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+      const taskRepo = await createEntity(knex, remult, base, Task)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        { id: 1, firstName: 'Zoe', lastName: 'Smith', companyId: 1 },
+        { id: 2, firstName: 'Alice', lastName: 'Johnson', companyId: 1 },
+      ])
+      await taskRepo.insert([
+        {
+          id: 1,
+          title: 'Task A',
+          priority: 'high',
+          assigneeId: 1,
+          dueDate: new Date(),
+        },
+        {
+          id: 2,
+          title: 'Task B',
+          priority: 'low',
+          assigneeId: 2,
+          dueDate: new Date(),
+        },
+      ])
+
+      const tasks = await taskRepo.find({
+        orderBy: { assigneeName: 'desc' },
+        include: { assignee: true },
+      })
+
+      expect(tasks[0].assigneeName).toBe('Zoe')
+      expect(tasks[1].assigneeName).toBe('Alice')
+    })
+  })
+
+  describe('Self-Referential Chain (manager→manager→manager)', () => {
+    it('should handle 3-level manager hierarchy', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        {
+          id: 1,
+          firstName: 'CEO',
+          lastName: 'Boss',
+          companyId: 1,
+          managerId: null,
+        },
+        {
+          id: 2,
+          firstName: 'VP',
+          lastName: 'Middle',
+          companyId: 1,
+          managerId: 1,
+        },
+        {
+          id: 3,
+          firstName: 'Manager',
+          lastName: 'Low',
+          companyId: 1,
+          managerId: 2,
+        },
+        {
+          id: 4,
+          firstName: 'Worker',
+          lastName: 'Bee',
+          companyId: 1,
+          managerId: 3,
+        },
+      ])
+
+      const employees = await employeeRepo.find({
+        include: { manager: true },
+        orderBy: { id: 'asc' },
+      })
+
+      expect(employees[0].manager).toBeNull() // CEO has no manager
+      expect(employees[1].manager?.firstName).toBe('CEO')
+      expect(employees[2].manager?.firstName).toBe('VP')
+      expect(employees[3].manager?.firstName).toBe('Manager')
+    })
+
+    it('should filter self-referential by manager id', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        {
+          id: 1,
+          firstName: 'CEO',
+          lastName: 'Boss',
+          companyId: 1,
+          managerId: null,
+        },
+        { id: 2, firstName: 'VP1', lastName: 'A', companyId: 1, managerId: 1 },
+        { id: 3, firstName: 'VP2', lastName: 'B', companyId: 1, managerId: 1 },
+        {
+          id: 4,
+          firstName: 'Worker',
+          lastName: 'C',
+          companyId: 1,
+          managerId: 2,
+        },
+      ])
+
+      // Find direct reports to CEO
+      const directReports = await employeeRepo.find({
+        where: { manager: { $id: 1 } },
+        include: { manager: true },
+      })
+
+      expect(directReports.length).toBe(2)
+      expect(directReports.every((e) => e.manager?.firstName === 'CEO')).toBe(
+        true,
+      )
+    })
+  })
+
+  describe('Complex WHERE with $or/$and on @JOIN Fields', () => {
+    it('should filter with $or on @JOIN field', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const orderRepo = await createEntity(knex, remult, base, Order)
+
+      await companyRepo.insert([
+        { id: 1, name: 'Alpha Corp', city: 'NYC' },
+        { id: 2, name: 'Beta Inc', city: 'LA' },
+        { id: 3, name: 'Gamma LLC', city: 'Chicago' },
+      ])
+      await orderRepo.insert([
+        { id: 1, orderNumber: 'ORD-001', orderDate: new Date(), customerId: 1 },
+        { id: 2, orderNumber: 'ORD-002', orderDate: new Date(), customerId: 2 },
+        { id: 3, orderNumber: 'ORD-003', orderDate: new Date(), customerId: 3 },
+      ])
+
+      const orders = await orderRepo.find({
+        where: { $or: [{ customerCity: 'NYC' }, { customerCity: 'LA' }] },
+        include: { customer: true },
+      })
+
+      expect(orders.length).toBe(2)
+    })
+
+    it('should filter with combined $and and relation filter', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const orderRepo = await createEntity(knex, remult, base, Order)
+
+      await companyRepo.insert([
+        { id: 1, name: 'Alpha Corp', city: 'NYC' },
+        { id: 2, name: 'Beta Inc', city: 'NYC' },
+      ])
+      await orderRepo.insert([
+        {
+          id: 1,
+          orderNumber: 'ORD-001',
+          orderDate: new Date('2024-01-01'),
+          customerId: 1,
+        },
+        {
+          id: 2,
+          orderNumber: 'ORD-002',
+          orderDate: new Date('2024-06-01'),
+          customerId: 1,
+        },
+        {
+          id: 3,
+          orderNumber: 'ORD-003',
+          orderDate: new Date('2024-01-01'),
+          customerId: 2,
+        },
+      ])
+
+      // Filter by customerCity AND customerId
+      const orders = await orderRepo.find({
+        where: {
+          customerCity: 'NYC',
+          customer: { $id: 1 },
+        },
+        include: { customer: true },
+      })
+
+      expect(orders.length).toBe(2)
+      expect(orders.every((o) => o.customer?.name === 'Alpha Corp')).toBe(true)
+    })
+  })
+
+  describe('Transaction Rollback Scenarios', () => {
+    it('should rollback on error', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+
+      // Insert initial data
+      await companyRepo.insert({ id: 1, name: 'Initial', city: 'NYC' })
+      expect(await companyRepo.count()).toBe(1)
+
+      // Try transaction that will fail
+      try {
+        await provider.transaction(async (txProvider) => {
+          const txRemult = new Remult(txProvider)
+          await txRemult
+            .repo(Company)
+            .insert({ id: 2, name: 'In Transaction', city: 'TX' })
+
+          // Verify it exists within transaction
+          const count = await txRemult.repo(Company).count()
+          expect(count).toBe(2)
+
+          // Force error to trigger rollback
+          throw new Error('Forced rollback')
+        })
+      } catch (e) {
+        // Expected error
+      }
+
+      // Verify rollback happened
+      expect(await companyRepo.count()).toBe(1)
+    })
+
+    it('should commit successful transaction', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+
+      await provider.transaction(async (txProvider) => {
+        const txRemult = new Remult(txProvider)
+        await txRemult
+          .repo(Company)
+          .insert({ id: 1, name: 'Committed', city: 'TX' })
+      })
+
+      expect(await companyRepo.count()).toBe(1)
+      expect((await companyRepo.findFirst())?.name).toBe('Committed')
+    })
+  })
+
+  describe('Update/Delete with Loaded Relations', () => {
+    it('should update entity after loading with relations', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert({
+        id: 1,
+        firstName: 'John',
+        lastName: 'Doe',
+        companyId: 1,
+      })
+
+      // Load with relation
+      const employees = await employeeRepo.find({ include: { company: true } })
+      expect(employees[0].company?.name).toBe('Corp')
+
+      // Update the employee
+      await employeeRepo.update(1, { firstName: 'Jane' })
+
+      // Verify update worked
+      const updated = await employeeRepo.findId(1)
+      expect(updated?.firstName).toBe('Jane')
+    })
+
+    it('should delete entity after loading with relations', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        { id: 1, firstName: 'John', lastName: 'Doe', companyId: 1 },
+        { id: 2, firstName: 'Jane', lastName: 'Smith', companyId: 1 },
+      ])
+
+      // Load with relation
+      const employees = await employeeRepo.find({ include: { company: true } })
+      expect(employees.length).toBe(2)
+
+      // Delete one
+      await employeeRepo.delete(1)
+
+      // Verify deletion
+      expect(await employeeRepo.count()).toBe(1)
+    })
+  })
+
+  describe('Null Handling in Nested Relations', () => {
+    it('should handle all nulls in chain gracefully', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      // Employee with null managerId and valid company
+      await employeeRepo.insert({
+        id: 1,
+        firstName: 'Lonely',
+        lastName: 'Worker',
+        companyId: 1,
+        managerId: null,
+      })
+
+      const employees = await employeeRepo.find({
+        include: { company: true, manager: true },
+      })
+
+      expect(employees[0].company?.name).toBe('Corp')
+      expect(employees[0].manager).toBeNull()
+    })
+
+    it('should count correctly with null relations', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      await employeeRepo.insert([
+        {
+          id: 1,
+          firstName: 'With Manager',
+          lastName: 'A',
+          companyId: 1,
+          managerId: null,
+        },
+        {
+          id: 2,
+          firstName: 'Reports To 1',
+          lastName: 'B',
+          companyId: 1,
+          managerId: 1,
+        },
+        {
+          id: 3,
+          firstName: 'Also Reports',
+          lastName: 'C',
+          companyId: 1,
+          managerId: 1,
+        },
+      ])
+
+      // Count those with manager
+      const withManager = await employeeRepo.count({ manager: { $id: 1 } })
+      expect(withManager).toBe(2)
+    })
+  })
+
+  describe('Edge Cases - Empty Results and Boundaries', () => {
+    it('should handle query returning zero results with relations', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+      // No employees
+
+      const employees = await employeeRepo.find({ include: { company: true } })
+      expect(employees).toEqual([])
+    })
+
+    it('should handle findId with relations when not found', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+      const employeeRepo = await createEntity(knex, remult, base, Employee)
+
+      await companyRepo.insert({ id: 1, name: 'Corp', city: 'NYC' })
+
+      const employee = await employeeRepo.findId(999)
+      expect(employee).toBeUndefined()
+    })
+
+    it('should handle pagination at boundaries', async () => {
+      const companyRepo = await createEntity(knex, remult, base, Company)
+
+      await companyRepo.insert([
+        { id: 1, name: 'A', city: 'NYC' },
+        { id: 2, name: 'B', city: 'NYC' },
+        { id: 3, name: 'C', city: 'NYC' },
+      ])
+
+      // Request page beyond data
+      const page10 = await companyRepo.find({
+        limit: 2,
+        page: 10,
+        orderBy: { id: 'asc' },
+      })
+      expect(page10).toEqual([])
+
+      // Request exactly at boundary
+      const page2 = await companyRepo.find({
+        limit: 2,
+        page: 2,
+        orderBy: { id: 'asc' },
+      })
+      expect(page2.length).toBe(1)
+      expect(page2[0].id).toBe(3)
     })
   })
 }
@@ -653,8 +1369,35 @@ describe('OptimizedDataProvider - MSSQL', () => {
     Knex.default({
       client: 'mssql',
       connection: {
-        server: '46.4.187.155',
-        database: 'test3',
+        server: '192.168.8.150',
+        database: 'master',
+        user: 'sa',
+        password: 'kjsD2387mad',
+        options: {
+          enableArithAbort: true,
+          encrypt: false,
+        },
+      },
+    }),
+  )
+})
+
+describe('OptimizedDataProvider Advanced - PostgreSQL', () => {
+  runAdvancedOptimizedProviderTests(() =>
+    Knex.default({
+      client: 'pg',
+      connection: postgresConnection,
+    }),
+  )
+})
+
+describe('OptimizedDataProvider Advanced - MSSQL', () => {
+  runAdvancedOptimizedProviderTests(() =>
+    Knex.default({
+      client: 'mssql',
+      connection: {
+        server: '192.168.8.150',
+        database: 'master',
         user: 'sa',
         password: 'kjsD2387mad',
         options: {
