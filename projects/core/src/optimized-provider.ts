@@ -285,9 +285,6 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
     });
   }
 
-  /**
-   * Genera un subquery simple para un solo nivel de relación
-   */
   private simpleJoinToSubquery(
     relationKey: string,
     fieldName: string,
@@ -302,7 +299,6 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
       return 'NULL';
     }
 
-    // Buscar la relación en la metadata
     const fieldOptions = (fkField as any).options;
     const relationInfo =
       relationDetails.relationField && (relationDetails.relationField as any)[fieldRelationInfo]
@@ -325,7 +321,6 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
       ? (relatedIdField.options as any)?.dbName || relatedIdField.key
       : 'id';
 
-    // Buscar el campo en la entidad relacionada
     const relatedField = relatedEntity.fields.toArray().find((f: any) => {
       const dbName = (f.options as any)?.dbName || f.key;
       return f.key === fieldName || dbName === fieldName;
@@ -335,11 +330,30 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
       return 'NULL';
     }
 
-    const relatedFieldDbName =
-      (relatedField.options as any)?.dbName || relatedField.key;
+    const relatedFieldOptions = (relatedField as any).options;
     const fkFieldDbName = fieldOptions?.dbName || fkField.key;
 
-    // Si la entidad relacionada tiene sqlExpression (es una subquery), usarla
+    if (relatedFieldOptions?.sqlExpression) {
+      let sqlExpr =
+        typeof relatedFieldOptions.sqlExpression === 'function'
+          ? relatedFieldOptions.sqlExpression(relatedEntity, { useJoins: false })
+          : relatedFieldOptions.sqlExpression;
+
+      if (typeof sqlExpr === 'string' && sqlExpr.includes('@JOIN:')) {
+        const resolvedExpr = this.resolveNestedJoinExpression(
+          sqlExpr,
+          relatedEntity,
+          relatedTableName,
+          mainTableAlias,
+          fkFieldDbName,
+          relatedIdDbName
+        );
+        return resolvedExpr;
+      }
+    }
+
+    const relatedFieldDbName = relatedFieldOptions?.dbName || relatedField.key;
+
     const relatedEntityOptions = (relatedEntity as any).options;
     if (relatedEntityOptions?.sqlExpression) {
       let relatedTableExpression =
@@ -347,7 +361,6 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
           ? relatedEntityOptions.sqlExpression(relatedEntity)
           : relatedEntityOptions.sqlExpression;
 
-      // Limpiar alias si tiene (con o sin "as", y también después de paréntesis)
       relatedTableExpression = relatedTableExpression
         .replace(/\s+as\s+\w+\s*$/i, '')
         .replace(/\)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i, ')')
@@ -362,7 +375,6 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
       );
     }
 
-    // Subquery normal
     return this.normalizeSql(
       `(SELECT ${this.wrapIdentifier(
         relatedFieldDbName
@@ -373,6 +385,138 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
         fkFieldDbName
       )})`
     );
+  }
+
+  private resolveNestedJoinExpression(
+    sqlExpr: string,
+    intermediateEntity: EntityMetadata,
+    intermediateTableName: string,
+    mainTableAlias: string,
+    mainFkDbName: string,
+    intermediateIdDbName: string
+  ): string {
+    const joinMatch = sqlExpr.match(/@JOIN:([\w.]+)/);
+    if (!joinMatch) {
+      return 'NULL';
+    }
+
+    const fullPath = joinMatch[1];
+    const parts = fullPath.split('.');
+    if (parts.length < 2) {
+      return 'NULL';
+    }
+
+    const targetFieldName = parts[parts.length - 1];
+    const relationPath = parts.slice(0, -1);
+
+    let currentEntity = intermediateEntity;
+    const joins: string[] = [];
+    let firstJoinFkDbName = '';
+
+    for (let i = 0; i < relationPath.length; i++) {
+      const relationKey = relationPath[i];
+      const relationDetails = this.getRelationDetailsForEntity(currentEntity, relationKey);
+      
+      if (!relationDetails.fkField || !relationDetails.relatedEntity) {
+        return 'NULL';
+      }
+
+      const nextEntity = relationDetails.relatedEntity;
+      const nextTableName = nextEntity.dbName || nextEntity.key;
+      const nextIdField = nextEntity.idMetadata?.fields?.[0];
+      const nextIdDbName = nextIdField
+        ? (nextIdField.options as any)?.dbName || nextIdField.key
+        : 'id';
+      const fkDbName = (relationDetails.fkField.options as any)?.dbName || relationDetails.fkField.key;
+
+      if (i === 0) {
+        firstJoinFkDbName = fkDbName;
+      }
+
+      const tableAlias = `n${i}`;
+      const wrappedAlias = this.alias(tableAlias);
+
+      if (i === 0) {
+        joins.push(`${this.wrapTableName(nextTableName)} ${wrappedAlias}`);
+      } else {
+        const prevAlias = `n${i - 1}`;
+        joins.push(
+          `INNER JOIN ${this.wrapTableName(nextTableName)} ${wrappedAlias} ON ${this.col(
+            tableAlias,
+            nextIdDbName
+          )} = ${this.col(prevAlias, fkDbName)}`
+        );
+      }
+
+      currentEntity = nextEntity;
+    }
+
+    const targetField = currentEntity.fields.toArray().find((f: any) => {
+      const dbName = (f.options as any)?.dbName || f.key;
+      return f.key === targetFieldName || dbName === targetFieldName;
+    });
+
+    if (!targetField) {
+      return 'NULL';
+    }
+
+    const targetFieldDbName = (targetField.options as any)?.dbName || targetField.key;
+    const lastTableAlias = `n${relationPath.length - 1}`;
+
+    const firstRelatedEntity = this.getRelationDetailsForEntity(intermediateEntity, relationPath[0]).relatedEntity;
+    if (!firstRelatedEntity) {
+      return 'NULL';
+    }
+    const firstRelatedIdField = firstRelatedEntity.idMetadata?.fields?.[0];
+    const firstRelatedIdDbName = firstRelatedIdField
+      ? (firstRelatedIdField.options as any)?.dbName || firstRelatedIdField.key
+      : 'id';
+
+    return this.normalizeSql(
+      `(SELECT ${this.col(lastTableAlias, targetFieldDbName)} FROM ${this.wrapTableName(
+        intermediateTableName
+      )} int_tbl INNER JOIN ${joins.join(' ')} ON ${this.col(
+        'n0',
+        firstRelatedIdDbName
+      )} = ${this.col('int_tbl', firstJoinFkDbName)} WHERE ${this.col(
+        'int_tbl',
+        intermediateIdDbName
+      )} = ${this.col(mainTableAlias, mainFkDbName)})`
+    );
+  }
+
+  private getRelationDetailsForEntity(
+    entity: EntityMetadata,
+    relationKey: string
+  ): {
+    relationField?: any;
+    relationInfo?: any;
+    relatedEntity?: EntityMetadata;
+    fkField?: any;
+  } {
+    const relationField = entity.fields.toArray().find((f) => f.key === relationKey);
+    const relationInfo = relationField ? (relationField as any)[fieldRelationInfo] : undefined;
+    const relatedEntity = relationInfo?.toRepo?.metadata;
+
+    const fkFromInfo =
+      (relationInfo as any)?.fieldsMetadata?.[0] ||
+      (relationInfo as any)?.fieldMetadata;
+
+    const fieldOptionFkKey =
+      (relationField?.options as any)?.field ||
+      (relationField?.options as any)?.fieldKey;
+
+    const fkFieldByOption = fieldOptionFkKey
+      ? entity.fields.toArray().find((f) => f.key === fieldOptionFkKey)
+      : undefined;
+
+    const fkFieldByConvention = entity.fields
+      .toArray()
+      .find((f) => f.key === `${relationKey}Id`);
+
+    const fkField = fkFromInfo || fkFieldByOption || fkFieldByConvention;
+
+    return { relationField, relationInfo, relatedEntity, fkField };
   }
 
   /**
@@ -2298,6 +2442,25 @@ class FilterToKnexBridge {
                   });
 
                 if (relatedField) {
+                  const relatedFieldOptions = (relatedField as any).options;
+                  
+                  if (relatedFieldOptions?.sqlExpression) {
+                    let nestedSqlExpr =
+                      typeof relatedFieldOptions.sqlExpression === 'function'
+                        ? relatedFieldOptions.sqlExpression(matchingJoin.relatedEntity, { useJoins: false })
+                        : relatedFieldOptions.sqlExpression;
+                    
+                    if (typeof nestedSqlExpr === 'string' && nestedSqlExpr.includes('@JOIN:')) {
+                      return this.resolveNestedJoinToSubquery(
+                        matchingJoin.relatedEntity,
+                        relatedField.key,
+                        nestedSqlExpr,
+                        relationPath,
+                        this.tableAlias
+                      );
+                    }
+                  }
+                  
                   const relFieldDbName =
                     (relatedField.options as any)?.dbName || relatedField.key;
                   return this.col(matchingJoin.joinAlias, relFieldDbName);
@@ -2546,6 +2709,138 @@ class FilterToKnexBridge {
         );
       }
     );
+  }
+
+  private resolveNestedJoinToSubquery(
+    intermediateEntity: EntityMetadata,
+    _fieldKey: string,
+    nestedSqlExpr: string,
+    pathToIntermediate: string[],
+    mainTableAlias: string
+  ): string | null {
+    const joinMatch = nestedSqlExpr.match(/@JOIN:([\w.]+)/);
+    if (!joinMatch) return null;
+
+    const fullPath = joinMatch[1];
+    const parts = fullPath.split('.');
+    if (parts.length < 2) return null;
+
+    const targetFieldName = parts[parts.length - 1];
+    const nestedRelationPath = parts.slice(0, -1);
+
+    const intermediateTableName = intermediateEntity.dbName || intermediateEntity.key;
+    const intermediateIdField = intermediateEntity.idMetadata?.fields?.[0];
+    const intermediateIdDbName = intermediateIdField
+      ? (intermediateIdField.options as any)?.dbName || intermediateIdField.key
+      : 'id';
+
+    const fkToIntermediate = this.entityMetadata.fields
+      .toArray()
+      .find((f) => f.key === `${pathToIntermediate[0]}Id`);
+    if (!fkToIntermediate) return null;
+
+    const fkToIntermediateDbName = (fkToIntermediate.options as any)?.dbName || fkToIntermediate.key;
+
+    let currentEntity = intermediateEntity;
+    const joins: string[] = [];
+    let firstJoinFkDbName = '';
+
+    for (let i = 0; i < nestedRelationPath.length; i++) {
+      const relationKey = nestedRelationPath[i];
+      const relationDetails = this.getRelationDetailsForEntity(currentEntity, relationKey);
+      
+      if (!relationDetails.fkField || !relationDetails.relatedEntity) return null;
+
+      const nextEntity = relationDetails.relatedEntity;
+      const nextTableName = nextEntity.dbName || nextEntity.key;
+      const nextIdField = nextEntity.idMetadata?.fields?.[0];
+      const nextIdDbName = nextIdField
+        ? (nextIdField.options as any)?.dbName || nextIdField.key
+        : 'id';
+      const fkDbName = (relationDetails.fkField.options as any)?.dbName || relationDetails.fkField.key;
+
+      if (i === 0) firstJoinFkDbName = fkDbName;
+
+      const tableAlias = `n${i}`;
+      const wrappedAlias = this.wrapIdentifier(tableAlias);
+
+      if (i === 0) {
+        joins.push(`${this.wrapTableName(nextTableName)} ${wrappedAlias}`);
+      } else {
+        const prevAlias = `n${i - 1}`;
+        joins.push(
+          `INNER JOIN ${this.wrapTableName(nextTableName)} ${wrappedAlias} ON ${this.col(
+            tableAlias,
+            nextIdDbName
+          )} = ${this.col(prevAlias, fkDbName)}`
+        );
+      }
+
+      currentEntity = nextEntity;
+    }
+
+    const targetField = currentEntity.fields.toArray().find((f: any) => {
+      const dbName = (f.options as any)?.dbName || f.key;
+      return f.key === targetFieldName || dbName === targetFieldName;
+    });
+    if (!targetField) return null;
+
+    const targetFieldDbName = (targetField.options as any)?.dbName || targetField.key;
+    const lastTableAlias = `n${nestedRelationPath.length - 1}`;
+
+    const firstRelatedDetails = this.getRelationDetailsForEntity(intermediateEntity, nestedRelationPath[0]);
+    if (!firstRelatedDetails.relatedEntity) return null;
+
+    const firstRelatedIdField = firstRelatedDetails.relatedEntity.idMetadata?.fields?.[0];
+    const firstRelatedIdDbName = firstRelatedIdField
+      ? (firstRelatedIdField.options as any)?.dbName || firstRelatedIdField.key
+      : 'id';
+
+    return this.normalizeSql(
+      `(SELECT ${this.col(lastTableAlias, targetFieldDbName)} FROM ${this.wrapTableName(
+        intermediateTableName
+      )} int_tbl INNER JOIN ${joins.join(' ')} ON ${this.col(
+        'n0',
+        firstRelatedIdDbName
+      )} = ${this.col('int_tbl', firstJoinFkDbName)} WHERE ${this.col(
+        'int_tbl',
+        intermediateIdDbName
+      )} = ${this.col(mainTableAlias, fkToIntermediateDbName)})`
+    );
+  }
+
+  private getRelationDetailsForEntity(
+    entity: EntityMetadata,
+    relationKey: string
+  ): {
+    relationField?: any;
+    relationInfo?: any;
+    relatedEntity?: EntityMetadata;
+    fkField?: any;
+  } {
+    const relationField = entity.fields.toArray().find((f) => f.key === relationKey);
+    const relationInfo = relationField ? (relationField as any)[fieldRelationInfo] : undefined;
+    const relatedEntity = relationInfo?.toRepo?.metadata;
+
+    const fkFromInfo =
+      (relationInfo as any)?.fieldsMetadata?.[0] ||
+      (relationInfo as any)?.fieldMetadata;
+
+    const fieldOptionFkKey =
+      (relationField?.options as any)?.field ||
+      (relationField?.options as any)?.fieldKey;
+
+    const fkFieldByOption = fieldOptionFkKey
+      ? entity.fields.toArray().find((f) => f.key === fieldOptionFkKey)
+      : undefined;
+
+    const fkFieldByConvention = entity.fields
+      .toArray()
+      .find((f) => f.key === `${relationKey}Id`);
+
+    const fkField = fkFromInfo || fkFieldByOption || fkFieldByConvention;
+
+    return { relationField, relationInfo, relatedEntity, fkField };
   }
 }
 
