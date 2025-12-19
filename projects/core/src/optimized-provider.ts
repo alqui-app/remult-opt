@@ -940,12 +940,9 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
       const relatedIdFieldDbName =
         (idFieldMetadata.options as any)?.dbName || idFieldMetadata.key;
 
-      // Agregar el JOIN
-      const joinTableExpression = usesSqlExpression
-        ? knex.raw(`${relatedTableName} as ${this.alias(currentJoinAlias)}`)
-        : `${relatedTableName} as ${this.alias(currentJoinAlias)}`;
+      const joinTableExpr = `${relatedTableName} as ${this.alias(currentJoinAlias)}`;
+      const onCondition = `${this.col(parentAlias, fkFieldDbName)} = ${this.col(currentJoinAlias, relatedIdFieldDbName)}`;
 
-      // Verificar si el JOIN ya existe (evitar duplicados)
       const alreadyExists = validJoins.some(
         (j) => j.joinAlias === currentJoinAlias
       );
@@ -955,12 +952,7 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
         | undefined;
 
       if (!alreadyExists) {
-        // Solo agregar el JOIN si no existe con el mismo alias
-        query = query.leftJoin(
-          joinTableExpression,
-          this.col(parentAlias, fkFieldDbName),
-          this.col(currentJoinAlias, relatedIdFieldDbName)
-        );
+        query = query.joinRaw(`LEFT JOIN ${joinTableExpr} ON ${onCondition}`);
 
         validJoins.push({
           fieldKey: prefix
@@ -1679,16 +1671,10 @@ class OptimizedEntityDataProvider implements EntityDataProvider {
         (idFieldMetadata.options as any)?.dbName || idFieldMetadata.key;
 
       const joinAlias = `join_${relation.fieldKey}`;
+      const joinTableExpr = `${relatedTableName} as ${this.alias(joinAlias)}`;
+      const onCondition = `${this.col(mainTableAlias, fkFieldDbName)} = ${this.col(joinAlias, relatedIdFieldDbName)}`;
 
-      const joinTableExpression = usesSqlExpression
-        ? knex.raw(`${relatedTableName} as ${this.alias(joinAlias)}`)
-        : `${relatedTableName} as ${this.alias(joinAlias)}`;
-
-      query = query.leftJoin(
-        joinTableExpression,
-        this.col(mainTableAlias, fkFieldDbName),
-        this.col(joinAlias, relatedIdFieldDbName)
-      );
+      query = query.joinRaw(`LEFT JOIN ${joinTableExpr} ON ${onCondition}`);
 
       validJoins.push({
         fieldKey: relation.fieldKey,
@@ -2126,8 +2112,8 @@ class FilterToKnexBridge {
     this.promises.push(
       (async () => {
         const colName = await this.getColumnNameAsync(col);
-        if (!colName) return; // Si no se pudo generar SQL, saltar
-        this.result.push((b) => b.whereNull(colName));
+        if (!colName) return;
+        this.result.push((b) => b.whereRaw(`${colName} IS NULL`));
       })()
     );
   }
@@ -2136,8 +2122,8 @@ class FilterToKnexBridge {
     this.promises.push(
       (async () => {
         const colName = await this.getColumnNameAsync(col);
-        if (!colName) return; // Si no se pudo generar SQL, saltar
-        this.result.push((b) => b.whereNotNull(colName));
+        if (!colName) return;
+        this.result.push((b) => b.whereRaw(`${colName} IS NOT NULL`));
       })()
     );
   }
@@ -2147,11 +2133,10 @@ class FilterToKnexBridge {
       (async () => {
         const colName = await this.getColumnNameAsync(col);
         if (!colName) return;
-        this.result.push((knex) =>
-          knex.whereIn(
-            colName,
-            val.map((x) => this.translateValue(col, x))
-          )
+        const translatedValues = val.map((x) => this.translateValue(col, x));
+        const placeholders = translatedValues.map(() => '?').join(', ');
+        this.result.push((b) =>
+          b.whereRaw(`${colName} IN (${placeholders})`, translatedValues)
         );
       })()
     );
@@ -2256,11 +2241,10 @@ class FilterToKnexBridge {
     this.promises.push(
       (async () => {
         const colName = await this.getColumnNameAsync(col);
-        if (!colName) return; // Si no se pudo generar SQL o se debe ignorar, saltar
+        if (!colName) return;
         this.result.push((b) => {
           const translateValueResult = this.translateValue(col, val);
-          const x = b.where(colName, operator, translateValueResult);
-          return x;
+          return b.whereRaw(`${colName} ${operator} ?`, [translateValueResult]);
         });
       })()
     );

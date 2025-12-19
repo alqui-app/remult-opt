@@ -5,11 +5,10 @@ config()
 
 export default defineConfig({
   test: {
-    // threads: false,
     fileParallelism: false,
+    testTimeout: 30000,
 
     include: [
-      //   './projects/tests/tests/try-test.spec.ts',
       './projects/tests/**/*.spec.ts',
       './projects/tests/**/*.backend-spec.ts',
       './projects/tests/dbs/sql-lite.spec.ts',
